@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="AI-powered Email Spam Detection System using TF-IDF and Machine Learning. Analyze emails in real time." />
+  <title>SpamGuard AI — Email Spam Detector</title>
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+
+  <!-- Phosphor Icons -->
+  <script src="https://unpkg.com/@phosphor-icons/web@2.1.1/src/index.js" defer></script>
+
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+
+  <!-- Animated background blobs -->
+  <div class="bg-blobs" aria-hidden="true">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
+
+  <!-- ── HEADER ───────────────────────────────────────────────────── -->
+  <header class="header">
+    <div class="header-inner container">
+      <div class="logo">
+        <div class="logo-icon"><i class="ph-fill ph-shield-check"></i></div>
+        <span class="logo-text">SpamGuard <span class="accent">AI</span></span>
+      </div>
+      <nav class="header-nav">
+        <a href="#analyzer" class="nav-link">Analyzer</a>
+        <a href="#stats"    class="nav-link">Stats</a>
+        <a href="#about"    class="nav-link">About</a>
+      </nav>
+      <div class="header-badge">
+        <span class="badge-dot"></span>
+        <span>Model Active</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── HERO ─────────────────────────────────────────────────────── -->
+  <section class="hero container">
+    <div class="hero-tag"><i class="ph ph-cpu"></i>&nbsp;TF-IDF · Logistic Regression · NLP</div>
+    <h1 class="hero-title">
+      Detect Email Spam<br />
+      <span class="gradient-text">With AI Precision</span>
+    </h1>
+    <p class="hero-subtitle">
+      Paste any email content below and our machine learning model will
+      instantly classify it as spam or legitimate, with a full confidence
+      breakdown and linguistic analysis.
+    </p>
+
+    <!-- Stat pills -->
+    <div class="hero-stats">
+      <div class="stat-pill">
+        <i class="ph-fill ph-check-circle"></i>
+        <span><strong>{{ metrics.accuracy or '—' }}%</strong> Accuracy</span>
+      </div>
+      <div class="stat-pill">
+        <i class="ph-fill ph-target"></i>
+        <span><strong>{{ metrics.f1_score or '—' }}%</strong> F1 Score</span>
+      </div>
+      <div class="stat-pill">
+        <i class="ph-fill ph-chart-line-up"></i>
+        <span><strong>{{ metrics.roc_auc or '—' }}%</strong> ROC-AUC</span>
+      </div>
+      <div class="stat-pill">
+        <i class="ph-fill ph-database"></i>
+        <span><strong>{{ (metrics.spam_count or 0) + (metrics.ham_count or 0) }}</strong> Samples</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── ANALYZER ──────────────────────────────────────────────────── -->
+  <section id="analyzer" class="container section-gap">
+    <div class="analyzer-grid">
+
+      <!-- Left: Input Panel -->
+      <div class="panel glass" id="input-panel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <i class="ph ph-envelope-open"></i>
+            Email Content
+          </div>
+          <div class="char-counter" id="char-counter">0 / 5000</div>
+        </div>
+
+        <div class="textarea-wrapper">
+          <textarea
+            id="email-input"
+            class="email-textarea"
+            placeholder="Paste your email text here…&#10;&#10;Example: 'Congratulations! You've won $1,000,000! Click here to claim your prize now!'"
+            maxlength="5000"
+            spellcheck="false"
+          ></textarea>
+        </div>
+
+        <!-- Quick test buttons -->
+        <div class="quick-tests">
+          <span class="quick-label">Quick test:</span>
+          <button class="quick-btn spam-sample" id="btn-spam-sample" onclick="loadSample('spam')">
+            <i class="ph ph-warning"></i> Spam Sample
+          </button>
+          <button class="quick-btn ham-sample"  id="btn-ham-sample"  onclick="loadSample('ham')">
+            <i class="ph ph-check"></i> Ham Sample
+          </button>
+          <button class="quick-btn clear-btn"   id="btn-clear"       onclick="clearInput()">
+            <i class="ph ph-x"></i> Clear
+          </button>
+        </div>
+
+        <button class="analyze-btn" id="analyze-btn" onclick="analyzeEmail()">
+          <span class="btn-text"><i class="ph ph-magnifying-glass"></i>&nbsp;Analyze Email</span>
+          <span class="btn-loader" hidden>
+            <span class="spinner"></span> Analyzing…
+          </span>
+        </button>
+      </div>
+
+      <!-- Right: Result Panel -->
+      <div class="panel glass result-panel" id="result-panel">
+        <!-- Empty state -->
+        <div class="empty-state" id="empty-state">
+          <div class="empty-icon"><i class="ph ph-shield-slash"></i></div>
+          <p class="empty-title">No analysis yet</p>
+          <p class="empty-sub">Enter email content and click <strong>Analyze</strong> to see results.</p>
+        </div>
+
+        <!-- Result content (hidden until analysis) -->
+        <div id="result-content" hidden>
+
+          <!-- Verdict banner -->
+          <div class="verdict-banner" id="verdict-banner">
+            <div class="verdict-icon" id="verdict-icon"></div>
+            <div class="verdict-info">
+              <div class="verdict-label" id="verdict-label"></div>
+              <div class="verdict-sublabel" id="verdict-sublabel"></div>
+            </div>
+            <div class="risk-badge" id="risk-badge"></div>
+          </div>
+
+          <!-- Confidence bars -->
+          <div class="confidence-section">
+            <div class="conf-title">Confidence Breakdown</div>
+            <div class="conf-row">
+              <div class="conf-label">
+                <i class="ph-fill ph-warning-circle spam-icon"></i> Spam
+              </div>
+              <div class="conf-bar-wrap">
+                <div class="conf-bar spam-bar" id="spam-bar"></div>
+              </div>
+              <div class="conf-pct" id="spam-pct">—</div>
+            </div>
+            <div class="conf-row">
+              <div class="conf-label">
+                <i class="ph-fill ph-check-circle ham-icon"></i> Legitimate
+              </div>
+              <div class="conf-bar-wrap">
+                <div class="conf-bar ham-bar" id="ham-bar"></div>
+              </div>
+              <div class="conf-pct" id="ham-pct">—</div>
+            </div>
+          </div>
+
+          <!-- Feature chips -->
+          <div class="features-section" id="features-section">
+            <div class="conf-title">Signal Analysis</div>
+            <div class="feature-grid" id="feature-grid"></div>
+          </div>
+
+          <!-- Spam keywords -->
+          <div class="keywords-section" id="keywords-section" hidden>
+            <div class="conf-title">
+              <i class="ph ph-tag"></i> Spam Signals Detected
+            </div>
+            <div class="keyword-chips" id="keyword-chips"></div>
+          </div>
+
+          <!-- Timestamp -->
+          <div class="result-footer">
+            <i class="ph ph-clock"></i>
+            <span id="result-timestamp"></span>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /.analyzer-grid -->
+  </section>
+
+  <!-- ── STATS SECTION ─────────────────────────────────────────────── -->
+  <section id="stats" class="container section-gap">
+    <div class="section-header">
+      <h2 class="section-title">Model Performance</h2>
+      <p class="section-sub">Trained on {{ (metrics.spam_count or 0) + (metrics.ham_count or 0) }} labeled email samples with 5-fold cross-validation</p>
+    </div>
+
+    <div class="stats-grid">
+
+      <div class="stat-card glass">
+        <div class="stat-card-icon accuracy-icon"><i class="ph-fill ph-check-fat"></i></div>
+        <div class="stat-card-value counter" data-target="{{ metrics.accuracy or 0 }}">0</div>
+        <div class="stat-card-unit">%</div>
+        <div class="stat-card-label">Test Accuracy</div>
+        <div class="stat-card-bar">
+          <div class="stat-bar-fill accuracy-fill" style="width: {{ metrics.accuracy or 0 }}%"></div>
+        </div>
+      </div>
+
+      <div class="stat-card glass">
+        <div class="stat-card-icon f1-icon"><i class="ph-fill ph-target"></i></div>
+        <div class="stat-card-value counter" data-target="{{ metrics.f1_score or 0 }}">0</div>
+        <div class="stat-card-unit">%</div>
+        <div class="stat-card-label">Spam F1 Score</div>
+        <div class="stat-card-bar">
+          <div class="stat-bar-fill f1-fill" style="width: {{ metrics.f1_score or 0 }}%"></div>
+        </div>
+      </div>
+
+      <div class="stat-card glass">
+        <div class="stat-card-icon auc-icon"><i class="ph-fill ph-chart-line-up"></i></div>
+        <div class="stat-card-value counter" data-target="{{ metrics.roc_auc or 0 }}">0</div>
+        <div class="stat-card-unit">%</div>
+        <div class="stat-card-label">ROC-AUC Score</div>
+        <div class="stat-card-bar">
+          <div class="stat-bar-fill auc-fill" style="width: {{ metrics.roc_auc or 0 }}%"></div>
+        </div>
+      </div>
+
+      <div class="stat-card glass">
+        <div class="stat-card-icon cv-icon"><i class="ph-fill ph-arrows-clockwise"></i></div>
+        <div class="stat-card-value counter" data-target="{{ metrics.cv_f1_mean or 0 }}">0</div>
+        <div class="stat-card-unit">%</div>
+        <div class="stat-card-label">Cross-Val F1</div>
+        <div class="stat-card-bar">
+          <div class="stat-bar-fill cv-fill" style="width: {{ metrics.cv_f1_mean or 0 }}%"></div>
+        </div>
+      </div>
+
+    </div><!-- /.stats-grid -->
+
+    <!-- Dataset split info -->
+    <div class="dataset-info glass">
+      <div class="dataset-item">
+        <div class="dataset-dot spam-dot"></div>
+        <div>
+          <div class="dataset-num">{{ metrics.spam_count or '—' }}</div>
+          <div class="dataset-lbl">Spam Emails</div>
+        </div>
+      </div>
+      <div class="dataset-divider"></div>
+      <div class="dataset-item">
+        <div class="dataset-dot ham-dot"></div>
+        <div>
+          <div class="dataset-num">{{ metrics.ham_count or '—' }}</div>
+          <div class="dataset-lbl">Legitimate Emails</div>
+        </div>
+      </div>
+      <div class="dataset-divider"></div>
+      <div class="dataset-item">
+        <div class="dataset-dot train-dot"></div>
+        <div>
+          <div class="dataset-num">{{ metrics.train_size or '—' }}</div>
+          <div class="dataset-lbl">Training Samples</div>
+        </div>
+      </div>
+      <div class="dataset-divider"></div>
+      <div class="dataset-item">
+        <div class="dataset-dot test-dot"></div>
+        <div>
+          <div class="dataset-num">{{ metrics.test_size or '—' }}</div>
+          <div class="dataset-lbl">Test Samples</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── ABOUT / PIPELINE ──────────────────────────────────────────── -->
+  <section id="about" class="container section-gap">
+    <div class="section-header">
+      <h2 class="section-title">How It Works</h2>
+      <p class="section-sub">A classic NLP pipeline — from raw text to prediction in milliseconds</p>
+    </div>
+
+    <div class="pipeline-steps">
+      <div class="pipeline-step glass">
+        <div class="step-num">01</div>
+        <div class="step-icon"><i class="ph-fill ph-envelope"></i></div>
+        <div class="step-title">Raw Email Input</div>
+        <div class="step-desc">User pastes any email content — subject line, body, headers are all accepted.</div>
+      </div>
+      <div class="pipeline-arrow"><i class="ph ph-arrow-right"></i></div>
+
+      <div class="pipeline-step glass">
+        <div class="step-num">02</div>
+        <div class="step-icon"><i class="ph-fill ph-broom"></i></div>
+        <div class="step-title">Text Preprocessing</div>
+        <div class="step-desc">URLs, emails, phone numbers are tokenized. Stop-words removed, words lemmatized.</div>
+      </div>
+      <div class="pipeline-arrow"><i class="ph ph-arrow-right"></i></div>
+
+      <div class="pipeline-step glass">
+        <div class="step-num">03</div>
+        <div class="step-icon"><i class="ph-fill ph-vector-two"></i></div>
+        <div class="step-title">TF-IDF Vectorization</div>
+        <div class="step-desc">Text is converted to a 10,000-dimensional numeric vector using unigrams + bigrams.</div>
+      </div>
+      <div class="pipeline-arrow"><i class="ph ph-arrow-right"></i></div>
+
+      <div class="pipeline-step glass">
+        <div class="step-num">04</div>
+        <div class="step-icon"><i class="ph-fill ph-brain"></i></div>
+        <div class="step-title">ML Classification</div>
+        <div class="step-desc">Logistic Regression predicts spam probability with calibrated confidence scores.</div>
+      </div>
+      <div class="pipeline-arrow"><i class="ph ph-arrow-right"></i></div>
+
+      <div class="pipeline-step glass">
+        <div class="step-num">05</div>
+        <div class="step-icon"><i class="ph-fill ph-shield-check"></i></div>
+        <div class="step-title">Result + Insights</div>
+        <div class="step-desc">Verdict, confidence bars, detected spam signals, and risk level displayed in real time.</div>
+      </div>
+    </div>
+
+    <!-- Tech stack -->
+    <div class="tech-stack glass">
+      <div class="tech-title">Tech Stack</div>
+      <div class="tech-items">
+        <div class="tech-item"><i class="ph-fill ph-snake-logo"></i> Python 3.x</div>
+        <div class="tech-item"><i class="ph-fill ph-flask-logo"></i> Flask 3</div>
+        <div class="tech-item"><i class="ph-fill ph-atom"></i> Scikit-learn</div>
+        <div class="tech-item"><i class="ph-fill ph-text-t"></i> TF-IDF</div>
+        <div class="tech-item"><i class="ph-fill ph-brain"></i> NLTK</div>
+        <div class="tech-item"><i class="ph-fill ph-chart-bar"></i> NumPy / Pandas</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FOOTER ─────────────────────────────────────────────────────── -->
+  <footer class="footer">
+    <div class="container footer-inner">
+      <div class="logo">
+        <div class="logo-icon small"><i class="ph-fill ph-shield-check"></i></div>
+        <span class="logo-text small">SpamGuard <span class="accent">AI</span></span>
+      </div>
+      <p class="footer-copy">
+        Built with Python · Flask · Scikit-learn · TF-IDF &nbsp;|&nbsp;
+        Machine Learning Email Spam Classifier
+      </p>
+    </div>
+  </footer>
+
+  <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+{
+  "accuracy": 96.0,
+  "f1_score": 96.3,
+  "roc_auc": 98.08,
+  "train_size": 100,
+  "test_size": 25,
+  "spam_count": 63,
+  "ham_count": 62,
+  "cv_f1_mean": 79.06,
+  "cv_f1_std": 12.77
+}
